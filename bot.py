@@ -3,6 +3,9 @@ from discord.ext import commands
 import os
 from dotenv import load_dotenv
 
+from keep_alive import keep_alive
+
+
 load_dotenv()  # Læs .env filen
 token = os.getenv("DISCORD_TOKEN")
 
@@ -24,6 +27,8 @@ async def tilkald(ctx):
         await ctx.send(f"🚨 En kollega har brug for din hjælp, {role.mention}!")
     else:
         await ctx.send("❌ Kan ikke finde rollen **Politi**! Tjek om den findes.")
+
+keep_alive()
 
 # Til sidst: start botten
 bot.run(token)
