@@ -28,6 +28,10 @@ async def tilkald(ctx):
     else:
         await ctx.send("❌ Kan ikke finde rollen **Politi**! Tjek om den findes.")
 
+@bot.command()
+async def test(ctx):
+    await ctx.send("Botten virker! 🚀")
+
 keep_alive()
 
 # Til sidst: start botten
