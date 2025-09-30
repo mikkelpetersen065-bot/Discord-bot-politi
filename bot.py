@@ -1,9 +1,8 @@
 import discord
 from discord.ext import commands
 import os
-from dotenv import load_dotenv
 import json
-
+from dotenv import load_dotenv
 from keep_alive import keep_alive
 
 load_dotenv()
@@ -11,93 +10,91 @@ token = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
 intents.message_content = True
-
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-KANAL_FILE = "kanal_data.json"
+KANAL_FIL = "kanaler.json"
 
-# Load kanal-data fra fil
-try:
-    with open(KANAL_FILE, "r") as f:
-        kanal_data = json.load(f)
-except FileNotFoundError:
-    kanal_data = {}
+# Opret JSON fil hvis den ikke findes
+if not os.path.exists(KANAL_FIL):
+    with open(KANAL_FIL, "w") as f:
+        json.dump({}, f)
+
+# Indlæs kanal-data
+def load_kanaler():
+    with open(KANAL_FIL, "r") as f:
+        return json.load(f)
+
+# Gem kanal-data
+def save_kanaler(data):
+    with open(KANAL_FIL, "w") as f:
+        json.dump(data, f, indent=4)
 
 @bot.event
 async def on_ready():
     print(f"✅ Botten er logget ind som {bot.user}")
     print(f"🔹 Prefix: {bot.command_prefix}")
 
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setkanal(ctx, kanal_type: str):
-    kanal_type = kanal_type.lower()
-    if kanal_type not in ["politi", "borger", "rigspolitiet"]:
-        return await ctx.send("❌ Ugyldig type. Brug `politi`, `borger` eller `rigspolitiet`.")
-
-    guild_id = str(ctx.guild.id)
-    if guild_id not in kanal_data:
-        kanal_data[guild_id] = {}
-
-    kanal_data[guild_id][str(ctx.channel.id)] = {
-        "rolle_id": None,
-        "type": kanal_type
-    }
-
-    with open(KANAL_FILE, "w") as f:
-        json.dump(kanal_data, f, indent=4)
-
-    await ctx.send(f"✅ Denne kanal er nu sat op som `{kanal_type}` kanal. Brug !setrolle @rolle for at tilføje en rolle.")
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setrolle(ctx, rolle: discord.Role):
-    guild_id = str(ctx.guild.id)
-    kanal_id = str(ctx.channel.id)
-
-    if guild_id not in kanal_data or kanal_id not in kanal_data[guild_id]:
-        return await ctx.send("❌ Denne kanal er ikke sat op. Brug !setkanal først.")
-
-    kanal_data[guild_id][kanal_id]["rolle_id"] = rolle.id
-
-    with open(KANAL_FILE, "w") as f:
-        json.dump(kanal_data, f, indent=4)
-
-    await ctx.send(f"✅ Rollen {rolle.mention} er nu sat til denne kanal.")
-
+# Kommando: tilkald
 @bot.command()
 async def tilkald(ctx):
-    guild_id = str(ctx.guild.id)
-    kanal_id = str(ctx.channel.id)
+    kanaler = load_kanaler()
+    kanal_id = kanaler.get(str(ctx.guild.id))
 
-    if guild_id not in kanal_data or kanal_id not in kanal_data[guild_id]:
-        return await ctx.send("❌ Denne kanal er ikke sat op til !tilkald. Brug !setkanal først.")
+    if kanal_id != str(ctx.channel.id):
+        await ctx.send("❌ Denne kommando kan kun bruges i den kanal, der er sat med !setkanal.")
+        return
 
-    rolle_id = kanal_data[guild_id][kanal_id].get("rolle_id")
-    kanal_type = kanal_data[guild_id][kanal_id].get("type")
-
-    if not rolle_id:
-        return await ctx.send("❌ Rollen er ikke sat op. Brug !setrolle @rolle.")
-
-    role = ctx.guild.get_role(rolle_id)
-    if not role:
-        return await ctx.send("❌ Rollen findes ikke længere.")
-
-    if kanal_type == "politi":
-        await ctx.send(f"———————{role.mention}——————— 🚨 En kollega har brug for din hjælp!")
-    elif kanal_type == "rigspolitiet":
+    role = discord.utils.get(ctx.guild.roles, name="POLITI")
+    if role:
         await ctx.send(f"———————{role.mention}——————— 🚨 En person venter på dig!")
     else:
-        return await ctx.send("❌ Kanalen har ikke en gyldig type. Brug !setkanal for at konfigurere den korrekt.")
+        await ctx.send("❌ Kan ikke finde rollen **Politi**!")
 
+# Kommando: setkanal (kun admin)
 @bot.command()
-async def command(ctx):
-    embed = discord.Embed(title="📜 Kommandoer", description="Her er en liste over tilgængelige kommandoer", color=0x00ff00)
-    embed.add_field(name="!setkanal <type>", value="Sætter kanalen som `politi`, `borger` eller `rigspolitiet`. Kun admins.", inline=False)
-    embed.add_field(name="!setrolle @rolle", value="Sætter rollen til kanalen. Kun admins.", inline=False)
-    embed.add_field(name="!tilkald", value="Tilkalder den opsatte rolle i kanalen.", inline=False)
+@commands.has_permissions(administrator=True)
+async def setkanal(ctx):
+    kanaler = load_kanaler()
+    kanaler[str(ctx.guild.id)] = str(ctx.channel.id)
+    save_kanaler(kanaler)
+    await ctx.send("✅ Denne kanal er nu sat som tilkald-kanal.")
+
+@setkanal.error
+async def setkanal_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Du har ikke tilladelse til at bruge denne kommando.")
+
+# Kommando: commands (pæn embed)
+@bot.command()
+async def commands(ctx):
+    embed = discord.Embed(
+        title="📜 Bot Kommandoer",
+        description="Her er en oversigt over bot kommandoer og hvordan du bruger dem:",
+        color=discord.Color.green()
+    )
+
+    embed.add_field(
+        name="!tilkald",
+        value="Tilkalder den rolle, der er sat op for kanalen.\nEksempel: `!tilkald`",
+        inline=False
+    )
+    embed.add_field(
+        name="!setkanal",
+        value="Sætter den kanal, hvor !tilkald kan bruges.\nKun admin-brugere kan bruge denne.\nEksempel: `!setkanal` i ønsket kanal",
+        inline=False
+    )
+    embed.add_field(
+        name="!commands",
+        value="Viser denne oversigt over kommandoer.",
+        inline=False
+    )
+
+    embed.set_footer(text="Bot lavet af dig 😎")
+    embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/9/99/Discord_logo.svg")
+
     await ctx.send(embed=embed)
 
+# Test-kommando
 @bot.command()
 async def test(ctx):
     await ctx.send("Botten virker! 🚀")
