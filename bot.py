@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 import os
 import json
-import requests
 from dotenv import load_dotenv
 from keep_alive import keep_alive
 
@@ -13,21 +12,21 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-KANAL_FIL = "kanaler.json"
+DATA_FILE = "kanal_rolle_data.json"
 
-# Opret JSON fil hvis den ikke findes
-if not os.path.exists(KANAL_FIL):
-    with open(KANAL_FIL, "w") as f:
-        json.dump({}, f)
+# Opret JSON-fil hvis den ikke findes
+if not os.path.exists(DATA_FILE):
+    with open(DATA_FILE, "w") as f:
+        json.dump({}, f, indent=4)
 
-# Indlæs kanal-data
-def load_kanaler():
-    with open(KANAL_FIL, "r") as f:
+# Funktion: Load data
+def load_data():
+    with open(DATA_FILE, "r") as f:
         return json.load(f)
 
-# Gem kanal-data
-def save_kanaler(data):
-    with open(KANAL_FIL, "w") as f:
+# Funktion: Save data
+def save_data(data):
+    with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
 @bot.event
@@ -38,18 +37,22 @@ async def on_ready():
 # Kommando: tilkald
 @bot.command()
 async def tilkald(ctx):
-    kanaler = load_kanaler()
-    kanal_id = kanaler.get(str(ctx.guild.id))
+    data = load_data()
+    guild_id = str(ctx.guild.id)
+    kanal_id = str(ctx.channel.id)
 
-    if kanal_id != str(ctx.channel.id):
-        await ctx.send("❌ Denne kommando kan kun bruges i den kanal, der er sat med !setkanal.")
+    if guild_id not in data or kanal_id not in data[guild_id]:
+        await ctx.send("❌ Denne kanal er ikke sat op til tilkald.")
         return
 
-    role_name = kanaler.get(f"{ctx.guild.id}_rolle", "POLITI")
-    role = discord.utils.get(ctx.guild.roles, name=role_name)
+    role_name = data[guild_id][kanal_id]
+    if role_name is None:
+        await ctx.send("❌ Der er ikke sat en rolle for denne kanal. Brug `!setrolle @rolle`.")
+        return
 
+    role = discord.utils.get(ctx.guild.roles, name=role_name)
     if role:
-        await ctx.send(f"———————{role.mention}——————— 🚨 En person venter på dig!")
+        await ctx.send(f"———————{role.mention}——————— 🚨 Der er brug for assistance!")
     else:
         await ctx.send(f"❌ Kan ikke finde rollen **{role_name}**!")
 
@@ -57,10 +60,16 @@ async def tilkald(ctx):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setkanal(ctx):
-    kanaler = load_kanaler()
-    kanaler[str(ctx.guild.id)] = str(ctx.channel.id)
-    save_kanaler(kanaler)
-    await ctx.send("✅ Denne kanal er nu sat som tilkald-kanal.")
+    data = load_data()
+    guild_id = str(ctx.guild.id)
+    kanal_id = str(ctx.channel.id)
+
+    if guild_id not in data:
+        data[guild_id] = {}
+
+    data[guild_id][kanal_id] = None
+    save_data(data)
+    await ctx.send(f"✅ Denne kanal er nu sat som tilkald-kanal. Brug `!setrolle @rolle` for at vælge rolle.")
 
 @setkanal.error
 async def setkanal_error(ctx, error):
@@ -70,16 +79,25 @@ async def setkanal_error(ctx, error):
 # Kommando: setrolle (kun admin)
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def setrolle(ctx, rolle_navn):
-    kanaler = load_kanaler()
-    kanaler[f"{ctx.guild.id}_rolle"] = rolle_navn
-    save_kanaler(kanaler)
-    await ctx.send(f"✅ Rollen er nu sat til **{rolle_navn}** for denne server.")
+async def setrolle(ctx, role: discord.Role):
+    data = load_data()
+    guild_id = str(ctx.guild.id)
+    kanal_id = str(ctx.channel.id)
+
+    if guild_id not in data or kanal_id not in data[guild_id]:
+        await ctx.send("❌ Denne kanal er ikke sat som tilkald-kanal. Brug først `!setkanal`.")
+        return
+
+    data[guild_id][kanal_id] = role.name
+    save_data(data)
+    await ctx.send(f"✅ Rollen **{role.name}** er nu sat for denne kanal.")
 
 @setrolle.error
 async def setrolle_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("❌ Du har ikke tilladelse til at bruge denne kommando.")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send("❌ Kunne ikke finde rollen. Brug format: `!setrolle @rolle`.")
 
 # Kommando: commands (pæn embed)
 @bot.command()
@@ -101,13 +119,8 @@ async def commands(ctx):
         inline=False
     )
     embed.add_field(
-        name="!setrolle <rolenavn>",
-        value="Sætter rollen der tilkaldes i den kanal.\nKun admin-brugere kan bruge denne.\nEksempel: `!setrolle Rigspolitiet`",
-        inline=False
-    )
-    embed.add_field(
-        name="!minip",
-        value="Sender botens VPS’ offentlige IP privat til ejeren.\nKun ejeren kan bruge denne.",
+        name="!setrolle @rolle",
+        value="Vælger hvilken rolle, der skal kaldes i den kanal.\nKun admin-brugere kan bruge denne.\nEksempel: `!setrolle @Politi`",
         inline=False
     )
     embed.add_field(
@@ -116,24 +129,10 @@ async def commands(ctx):
         inline=False
     )
 
-    embed.set_footer(text="Bot lavet af dig 😎")
+    embed.set_footer(text="Ligma")
     embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/9/99/Discord_logo.svg")
 
     await ctx.send(embed=embed)
-
-# Kommando: minip (kun ejer)
-@bot.command()
-async def minip(ctx):
-    ejer_id = 820010231400103956  # <-- SKIFT dette til dit Discord-bruger-ID
-    if ctx.author.id != ejer_id:
-        await ctx.send("❌ Du har ikke tilladelse til at bruge denne kommando.")
-        return
-    try:
-        offentlig_ip = requests.get("https://api.ipify.org").text
-        await ctx.author.send(f"Min VPS’ offentlige IP er: `{offentlig_ip}`")
-        await ctx.send("✅ IP’en er sendt til dig i en privat besked 📩")
-    except Exception as e:
-        await ctx.send(f"❌ Fejl ved hentning af IP: {e}")
 
 # Test-kommando
 @bot.command()
