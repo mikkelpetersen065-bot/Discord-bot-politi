@@ -1,5 +1,11 @@
 <<<<<<< HEAD
 .env
+/requests/
+/urllib3/
+/certifi/
+/idna/
+/charset_normalizer/
+/*.dist-info
 =======
 # Byte-compiled / optimized / DLL files
 __pycache__/
