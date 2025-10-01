@@ -8,7 +8,7 @@ from keep_alive import keep_alive
 
 load_dotenv()
 token = os.getenv("DISCORD_TOKEN")
-OWNER_ID = int(os.getenv("OWNER_ID"))
+OWNER_ID = os.getenv("OWNER_ID")
 
 intents = discord.Intents.default()
 intents.message_content = True
