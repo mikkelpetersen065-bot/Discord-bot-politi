@@ -1,16 +1,11 @@
 import discord
 from discord.ext import commands
-import os
 import json
-import requests
 from dotenv import load_dotenv
 from keep_alive import keep_alive
 
 load_dotenv()
 token = os.getenv("DISCORD_TOKEN")
-OWNER_ID = int(os.getenv("OWNER_ID"))
-
-print (OWNER_ID)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -152,20 +147,6 @@ async def commands(ctx):
 @bot.command()
 async def test(ctx):
     await ctx.send("Botten virker! 🚀")
-
-# Kommando: minip (kun ejer)
-@bot.command()
-async def minip(ctx):
-    if ctx.author.id != OWNER_ID:
-        await ctx.send("❌ Du har ikke tilladelse til at bruge denne kommando.")
-        return
-
-    try:
-        ip = requests.get("https://ifconfig.me").text
-        await ctx.author.send(f"🌍 VPS Public IP: `{ip}`")
-        await ctx.send("✅ IP'en er sendt til dig i en privat besked.")
-    except Exception as e:
-        await ctx.send(f"❌ Kunne ikke hente IP: {e}")
 
 keep_alive()
 bot.run(token)
